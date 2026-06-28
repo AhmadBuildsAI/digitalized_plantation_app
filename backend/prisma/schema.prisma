@@ -1,0 +1,311 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+  SUPPORT
+  SUPER_ADMIN
+}
+
+enum EquipmentType {
+  WATER_PUMP
+  INTAKE_FAN
+  EXHAUST_FAN
+  GROW_LIGHTS
+  HUMIDIFIER
+}
+
+enum EquipmentState {
+  ON
+  OFF
+}
+
+enum DeviceStatus {
+  ONLINE
+  OFFLINE
+  ACTIVE
+  INACTIVE
+  FAULT
+}
+
+enum NotificationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum NotificationType {
+  PUMP_FAILURE
+  LOW_MOISTURE
+  HIGH_TEMPERATURE
+  CONNECTION_LOST
+  SENSOR_FAILURE
+  CONTROLLER_OFFLINE
+  SYSTEM
+  SUPPORT
+}
+
+enum TicketCategory {
+  MVP_TECHNICAL
+  PLANTATION_GUIDANCE
+  GENERAL_INQUIRY
+  EMERGENCY_SUPPORT
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  ASSIGNED
+  RESOLVED
+  CLOSED
+  REOPENED
+}
+
+enum PlantationStatus {
+  HEALTHY
+  WARNING
+  CRITICAL
+  OFFLINE
+}
+
+enum ActivityAction {
+  LOGIN
+  LOGOUT
+  EQUIPMENT_CONTROL
+  SUPPORT_MESSAGE
+  NOTIFICATION
+  PROFILE_UPDATE
+  SYSTEM_EVENT
+  ACCOUNT_UPDATE
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  firstName     String    @map("first_name")
+  lastName      String    @map("last_name")
+  role          UserRole  @default(CUSTOMER)
+  isActive      Boolean   @default(true) @map("is_active")
+  phone         String?
+  avatarUrl     String?   @map("avatar_url")
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  customerProfile   Customer?
+  sessions          Session[]
+  activityLogs      ActivityLog[]
+  assignedTickets   SupportTicket[] @relation("AssignedTickets")
+  ticketMessages    TicketMessage[]
+  auditLogs         AuditLog[]
+
+  @@map("users")
+}
+
+model Customer {
+  id                    String   @id @default(uuid())
+  userId                String   @unique @map("user_id")
+  companyName           String?  @map("company_name")
+  manualControlEnabled  Boolean  @default(false) @map("manual_control_enabled")
+  notes                 String?
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plantations   Plantation[]
+  permissions   Permission[]
+  supportTickets SupportTicket[]
+
+  @@map("customers")
+}
+
+model Plantation {
+  id              String           @id @default(uuid())
+  customerId      String           @map("customer_id")
+  name            String
+  location        String?
+  status          PlantationStatus @default(HEALTHY)
+  connectedDevices Int             @default(0) @map("connected_devices")
+  isOnline        Boolean          @default(true) @map("is_online")
+  lastActivityAt  DateTime         @default(now()) @map("last_activity_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  customer      Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  equipment     Equipment[]
+  notifications Notification[]
+  iotDevices    IoTDevice[]
+
+  @@map("plantations")
+}
+
+model Equipment {
+  id             String         @id @default(uuid())
+  plantationId   String         @map("plantation_id")
+  type           EquipmentType
+  name           String
+  status         DeviceStatus   @default(OFFLINE)
+  state          EquipmentState @default(OFF)
+  lastActivityAt DateTime       @default(now()) @map("last_activity_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  plantation Plantation     @relation(fields: [plantationId], references: [id], onDelete: Cascade)
+  logs       EquipmentLog[]
+
+  @@unique([plantationId, type])
+  @@map("equipment")
+}
+
+model EquipmentLog {
+  id          String         @id @default(uuid())
+  equipmentId String         @map("equipment_id")
+  userId      String?        @map("user_id")
+  action      String
+  previousState EquipmentState? @map("previous_state")
+  newState    EquipmentState? @map("new_state")
+  status      DeviceStatus?
+  ipAddress   String?        @map("ip_address")
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@map("equipment_logs")
+}
+
+model Notification {
+  id           String               @id @default(uuid())
+  plantationId String               @map("plantation_id")
+  type         NotificationType
+  priority     NotificationPriority @default(MEDIUM)
+  title        String
+  message      String
+  isRead       Boolean              @default(false) @map("is_read")
+  isArchived   Boolean              @default(false) @map("is_archived")
+  metadata     Json?
+  createdAt    DateTime             @default(now()) @map("created_at")
+
+  plantation Plantation @relation(fields: [plantationId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model SupportTicket {
+  id           String         @id @default(uuid())
+  customerId   String         @map("customer_id")
+  assignedToId String?        @map("assigned_to_id")
+  subject      String
+  category     TicketCategory
+  status       TicketStatus   @default(OPEN)
+  priority     NotificationPriority @default(MEDIUM)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+  closedAt     DateTime?      @map("closed_at")
+
+  customer   Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  messages   TicketMessage[]
+  assignedTo User?           @relation("AssignedTickets", fields: [assignedToId], references: [id])
+
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id         String   @id @default(uuid())
+  ticketId   String   @map("ticket_id")
+  senderId   String   @map("sender_id")
+  content    String
+  attachmentUrl String? @map("attachment_url")
+  isStaff    Boolean  @default(false) @map("is_staff")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender User          @relation(fields: [senderId], references: [id])
+
+  @@map("ticket_messages")
+}
+
+model ActivityLog {
+  id        String         @id @default(uuid())
+  userId    String?        @map("user_id")
+  action    ActivityAction
+  details   String?
+  device    String?
+  ipAddress String?        @map("ip_address")
+  status    String         @default("success")
+  metadata  Json?
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("activity_logs")
+}
+
+model Permission {
+  id                    String   @id @default(uuid())
+  customerId            String   @map("customer_id")
+  manualControlEnabled  Boolean  @default(false) @map("manual_control_enabled")
+  grantedById           String?  @map("granted_by_id")
+  grantedAt             DateTime @default(now()) @map("granted_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@map("permissions")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  refreshToken String   @unique @map("refresh_token")
+  rememberMe   Boolean  @default(false) @map("remember_me")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  action     String
+  oldValue   Json?    @map("old_value")
+  newValue   Json?    @map("new_value")
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
+
+model IoTDevice {
+  id           String   @id @default(uuid())
+  plantationId String   @map("plantation_id")
+  name         String
+  deviceType   String   @map("device_type")
+  serialNumber String?  @unique @map("serial_number")
+  isOnline     Boolean  @default(false) @map("is_online")
+  metadata     Json?
+  lastSeenAt   DateTime? @map("last_seen_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  plantation Plantation @relation(fields: [plantationId], references: [id], onDelete: Cascade)
+
+  @@map("iot_devices")
+}
