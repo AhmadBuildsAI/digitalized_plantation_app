@@ -49,7 +49,13 @@ export function authorize(...roles: UserRole[]) {
 }
 
 export function isInternalTeam(role: UserRole): boolean {
-  return [UserRole.ADMIN, UserRole.SUPPORT, UserRole.SUPER_ADMIN].includes(role);
+  const internalRoles: UserRole[] = [
+  UserRole.ADMIN,
+  UserRole.SUPPORT,
+  UserRole.SUPER_ADMIN,
+];
+
+return internalRoles.includes(role);
 }
 
 export async function getCustomerId(userId: string): Promise<string | null> {
