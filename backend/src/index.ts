@@ -63,7 +63,7 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-app.get('/api/health', (_req, res) => {
+app.get('/api/health', (_req: express.Request, res: express.Response) => {
   res.json({ success: true, data: { status: 'ok', app: 'Digitalized Plantation API' } });
 });
 
